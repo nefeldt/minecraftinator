@@ -1,0 +1,12 @@
+# The proxy is usually auto-created by the MinecraftServer controller.
+# Apply this manually to set baseDomain or to customize serviceType/image.
+apiVersion: minecraft.mittwald.de/v1alpha1
+kind: MinecraftProxy
+metadata:
+  name: proxy
+  namespace: default
+spec:
+  serviceType: LoadBalancer
+  # baseDomain is used to auto-assign subdomains to servers without an explicit domain.
+  # e.g. a server gets "a3f9c1.mc.feldt.systems"
+  baseDomain: mc.feldt.systems

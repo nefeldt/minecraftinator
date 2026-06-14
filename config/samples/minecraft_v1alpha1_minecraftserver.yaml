@@ -1,0 +1,57 @@
+# Server 1 — uses the proxy, domain auto-assigned from proxy's baseDomain
+apiVersion: minecraft.mittwald.de/v1alpha1
+kind: MinecraftServer
+metadata:
+  name: survival
+  namespace: default
+spec:
+  version: "1.21.4"
+  type: PAPER
+  motd: "Survival World"
+  maxPlayers: 20
+  difficulty: normal
+  gamemode: survival
+  memory: "2G"
+  # proxyRef defaults to "proxy", proxy is auto-created with baseDomain set below
+  storage:
+    size: "10Gi"
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "2.5Gi"
+    limits:
+      cpu: "2"
+      memory: "3Gi"
+---
+# Server 2 — uses the proxy with an explicit domain
+apiVersion: minecraft.mittwald.de/v1alpha1
+kind: MinecraftServer
+metadata:
+  name: creative
+  namespace: default
+spec:
+  version: "1.21.4"
+  type: PAPER
+  motd: "Creative World"
+  maxPlayers: 10
+  difficulty: peaceful
+  gamemode: creative
+  memory: "2G"
+  domain: creative.mc.feldt.systems
+  storage:
+    size: "5Gi"
+---
+# Server 3 — standalone, no proxy, exposed directly as NodePort
+apiVersion: minecraft.mittwald.de/v1alpha1
+kind: MinecraftServer
+metadata:
+  name: event
+  namespace: default
+spec:
+  version: "1.21.4"
+  type: VANILLA
+  motd: "Event Server"
+  memory: "1G"
+  disableProxy: true
+  serviceType: NodePort
+  nodePort: 30065
