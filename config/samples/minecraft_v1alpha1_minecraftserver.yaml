@@ -1,4 +1,4 @@
-# Server 1 — uses the proxy, domain auto-assigned from proxy's baseDomain
+# Server with auto-generated subdomain — just set baseDomain, proxy is created automatically
 apiVersion: minecraft.mittwald.de/v1alpha1
 kind: MinecraftServer
 metadata:
@@ -12,7 +12,7 @@ spec:
   difficulty: normal
   gamemode: survival
   memory: "2G"
-  # proxyRef defaults to "proxy", proxy is auto-created with baseDomain set below
+  baseDomain: mc.feldt.systems   # → auto-assigned e.g. a3f9c1.mc.feldt.systems
   storage:
     size: "10Gi"
   resources:
@@ -23,7 +23,7 @@ spec:
       cpu: "2"
       memory: "3Gi"
 ---
-# Server 2 — uses the proxy with an explicit domain
+# Server with an explicit domain
 apiVersion: minecraft.mittwald.de/v1alpha1
 kind: MinecraftServer
 metadata:
@@ -41,7 +41,7 @@ spec:
   storage:
     size: "5Gi"
 ---
-# Server 3 — standalone, no proxy, exposed directly as NodePort
+# Standalone server — no proxy, exposed directly as NodePort
 apiVersion: minecraft.mittwald.de/v1alpha1
 kind: MinecraftServer
 metadata:

@@ -111,7 +111,8 @@ func (r *MinecraftServerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 }
 
 // ensureProxy creates the MinecraftProxy named by spec.proxyRef if it doesn't exist,
-// and returns it. It never updates an existing proxy — the proxy controller owns its spec.
+// and returns it. If the proxy exists but has no BaseDomain and the server provides one,
+// it patches the proxy so auto-generated subdomains work without manual proxy setup.
 func (r *MinecraftServerReconciler) ensureProxy(ctx context.Context, mc *minecraftv1alpha1.MinecraftServer) (*minecraftv1alpha1.MinecraftProxy, error) {
 	proxyName := mc.Spec.ProxyRef
 	if proxyName == "" {
@@ -120,26 +121,35 @@ func (r *MinecraftServerReconciler) ensureProxy(ctx context.Context, mc *minecra
 
 	proxy := &minecraftv1alpha1.MinecraftProxy{}
 	err := r.Get(ctx, types.NamespacedName{Name: proxyName, Namespace: mc.Namespace}, proxy)
-	if err == nil {
-		return proxy, nil
+	if errors.IsNotFound(err) {
+		desired := &minecraftv1alpha1.MinecraftProxy{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      proxyName,
+				Namespace: mc.Namespace,
+			},
+			Spec: minecraftv1alpha1.MinecraftProxySpec{
+				BaseDomain:  mc.Spec.BaseDomain,
+				ServiceType: corev1.ServiceTypeLoadBalancer,
+			},
+		}
+		if createErr := r.Create(ctx, desired); createErr != nil {
+			return nil, createErr
+		}
+		return desired, nil
 	}
-	if !errors.IsNotFound(err) {
+	if err != nil {
 		return nil, err
 	}
 
-	desired := &minecraftv1alpha1.MinecraftProxy{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      proxyName,
-			Namespace: mc.Namespace,
-		},
-		Spec: minecraftv1alpha1.MinecraftProxySpec{
-			ServiceType: corev1.ServiceTypeLoadBalancer,
-		},
+	// If the proxy has no BaseDomain yet and this server provides one, set it.
+	if proxy.Spec.BaseDomain == "" && mc.Spec.BaseDomain != "" {
+		proxy.Spec.BaseDomain = mc.Spec.BaseDomain
+		if updateErr := r.Update(ctx, proxy); updateErr != nil {
+			return nil, updateErr
+		}
 	}
-	if createErr := r.Create(ctx, desired); createErr != nil {
-		return nil, createErr
-	}
-	return desired, nil
+
+	return proxy, nil
 }
 
 // ensureAssignedDomain sets status.assignedDomain if it hasn't been set yet.

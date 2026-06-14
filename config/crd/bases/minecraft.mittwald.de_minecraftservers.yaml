@@ -58,6 +58,13 @@ spec:
           spec:
             description: MinecraftServerSpec defines the desired state of MinecraftServer.
             properties:
+              baseDomain:
+                description: |-
+                  BaseDomain is used to auto-assign subdomains when no explicit Domain is given.
+                  e.g. "mc.feldt.systems" → server gets "a3f9c1.mc.feldt.systems".
+                  When the proxy is auto-created, this value is written to proxy.spec.baseDomain.
+                  Ignored when DisableProxy is true or Domain is set.
+                type: string
               difficulty:
                 default: easy
                 description: Difficulty sets the game difficulty.
@@ -77,10 +84,9 @@ spec:
                 type: boolean
               domain:
                 description: |-
-                  Domain is the public hostname players use to connect, e.g. "survival.mc.example.com".
+                  Domain is the public hostname players use to connect, e.g. "survival.mc.feldt.systems".
                   Ignored when DisableProxy is true.
-                  When unset and DisableProxy is false, a random subdomain is auto-assigned
-                  using the proxy's BaseDomain.
+                  When unset and BaseDomain is set, a random subdomain is auto-assigned.
                 type: string
               env:
                 description: Env allows passing arbitrary additional environment variables
@@ -238,7 +244,7 @@ spec:
                 default: proxy
                 description: |-
                   ProxyRef is the name of the MinecraftProxy this server should register with.
-                  If the proxy does not exist it is created automatically.
+                  The proxy is created automatically if it does not exist.
                   Ignored when DisableProxy is true. Defaults to "proxy".
                 type: string
               resources:

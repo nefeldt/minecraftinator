@@ -96,15 +96,21 @@ type MinecraftServerSpec struct {
 	// +kubebuilder:default=false
 	DisableProxy bool `json:"disableProxy,omitempty"`
 
-	// Domain is the public hostname players use to connect, e.g. "survival.mc.example.com".
+	// Domain is the public hostname players use to connect, e.g. "survival.mc.feldt.systems".
 	// Ignored when DisableProxy is true.
-	// When unset and DisableProxy is false, a random subdomain is auto-assigned
-	// using the proxy's BaseDomain.
+	// When unset and BaseDomain is set, a random subdomain is auto-assigned.
 	// +optional
 	Domain *string `json:"domain,omitempty"`
 
+	// BaseDomain is used to auto-assign subdomains when no explicit Domain is given.
+	// e.g. "mc.feldt.systems" → server gets "a3f9c1.mc.feldt.systems".
+	// When the proxy is auto-created, this value is written to proxy.spec.baseDomain.
+	// Ignored when DisableProxy is true or Domain is set.
+	// +optional
+	BaseDomain string `json:"baseDomain,omitempty"`
+
 	// ProxyRef is the name of the MinecraftProxy this server should register with.
-	// If the proxy does not exist it is created automatically.
+	// The proxy is created automatically if it does not exist.
 	// Ignored when DisableProxy is true. Defaults to "proxy".
 	// +kubebuilder:default="proxy"
 	ProxyRef string `json:"proxyRef,omitempty"`

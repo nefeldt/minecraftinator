@@ -1,34 +1,18 @@
 # minecraftinator
 
-A Kubernetes operator that runs Minecraft servers. Point it at a domain, get a server.
+A Kubernetes operator that runs Minecraft servers. Create a `MinecraftServer`, get a server with a DNS entry — no other setup required.
 
 ## What it does
 
-You create a `MinecraftServer` resource. The operator handles the rest:
-
-- Spins up a [`itzg/minecraft-server`](https://hub.docker.com/r/itzg/minecraft-server) pod
-- Creates a PVC for world data
-- Registers the server in a shared TCP proxy ([mc-router](https://github.com/itzg/mc-router)) so multiple servers share one IP and port 25565
-- Annotates the proxy's LoadBalancer service so ExternalDNS creates the DNS record automatically
-
-If you don't set a domain, the operator generates a random subdomain like `a3f9c1.mc.yourdomain.com`.
+- Runs [`itzg/minecraft-server`](https://hub.docker.com/r/itzg/minecraft-server) in a pod with a PVC for world data
+- Auto-creates a TCP proxy ([mc-router](https://github.com/itzg/mc-router)) so multiple servers share one IP on port 25565
+- Routes players to the right server by hostname (mc-router reads the Minecraft handshake)
+- Annotates the proxy's LoadBalancer service so ExternalDNS creates DNS records automatically
+- Generates a random subdomain when you don't specify one
 
 ## Quick start
 
-Apply the proxy first (sets the base domain for auto-generated subdomains):
-
-```yaml
-apiVersion: minecraft.mittwald.de/v1alpha1
-kind: MinecraftProxy
-metadata:
-  name: proxy
-  namespace: default
-spec:
-  baseDomain: mc.feldt.systems
-  serviceType: LoadBalancer
-```
-
-Then create a server:
+Just create a server. The proxy is created automatically.
 
 ```yaml
 apiVersion: minecraft.mittwald.de/v1alpha1
@@ -37,45 +21,45 @@ metadata:
   name: survival
   namespace: default
 spec:
-  version: "1.21.4"
   type: PAPER
   memory: "2G"
-  # leave out domain → gets auto-assigned, e.g. a3f9c1.mc.feldt.systems
+  baseDomain: mc.feldt.systems
 ```
 
 Check what domain was assigned:
 
 ```
-kubectl get minecraftservers
-NAME       VERSION   TYPE    DOMAIN                        PHASE     READY
-survival   1.21.4    PAPER   a3f9c1.mc.feldt.systems       Running   1
+$ kubectl get minecraftservers
+NAME       VERSION   TYPE    DOMAIN                    PHASE     READY
+survival   LATEST    PAPER   a3f9c1.mc.feldt.systems   Running   1
 ```
 
-Players connect to `a3f9c1.mc.feldt.systems:25565`. DNS is handled automatically via ExternalDNS + Cloudflare.
+Players connect to `a3f9c1.mc.feldt.systems:25565`. ExternalDNS handles the DNS record.
 
-## Server options
+## Spec reference
 
 ```yaml
 spec:
-  version: "1.21.4"        # or "LATEST"
-  type: PAPER               # VANILLA, FORGE, FABRIC, PAPER, SPIGOT, PURPUR, FOLIA
+  version: "1.21.4"          # Minecraft version, or "LATEST"
+  type: PAPER                 # VANILLA, FORGE, FABRIC, PAPER, SPIGOT, PURPUR, FOLIA
   motd: "My Server"
   maxPlayers: 20
-  difficulty: normal        # peaceful, easy, normal, hard
-  gamemode: survival        # survival, creative, adventure, spectator
-  memory: "2G"              # JVM heap
-  ops: "Notch,jeb_"        # comma-separated operator names
+  difficulty: normal          # peaceful, easy, normal, hard
+  gamemode: survival          # survival, creative, adventure, spectator
+  memory: "2G"                # JVM heap size
+  ops: "Notch,jeb_"          # comma-separated operator names
   whitelist: false
 
-  # explicit domain instead of auto-generated
-  domain: survival.mc.feldt.systems
+  # domain routing (pick one)
+  baseDomain: mc.feldt.systems            # auto-assign: a3f9c1.mc.feldt.systems
+  domain: survival.mc.feldt.systems       # or set an explicit hostname
 
-  # which proxy to register with (auto-created if missing)
-  proxyRef: proxy
+  # which proxy to register with — created automatically if missing
+  proxyRef: proxy             # default: "proxy"
 
   storage:
     size: "10Gi"
-    storageClassName: longhorn   # optional
+    storageClassName: longhorn
 
   resources:
     requests:
@@ -84,11 +68,16 @@ spec:
     limits:
       cpu: "2"
       memory: "3Gi"
+
+  # pass extra env vars to itzg/minecraft-server
+  env:
+    - name: ENABLE_COMMAND_BLOCK
+      value: "true"
 ```
 
-## Standalone mode (no proxy)
+## Standalone mode
 
-If you want a server with its own port instead of going through the proxy:
+Skip the proxy entirely and expose the server directly:
 
 ```yaml
 spec:
@@ -97,22 +86,23 @@ spec:
   nodePort: 30065
 ```
 
-Players connect to `<node-ip>:30065`. No DNS is created.
+Players connect to `<node-ip>:30065`. No DNS record is created.
 
-## Multiple servers, one IP
-
-The proxy ([mc-router](https://github.com/itzg/mc-router)) reads the hostname from the Minecraft handshake packet and routes the connection to the right backend. All servers run on port 25565 behind a single LoadBalancer IP.
+## How the routing works
 
 ```
-player → survival.mc.feldt.systems:25565 → proxy → survival pod
-player → creative.mc.feldt.systems:25565 → proxy → creative pod
+player → survival.mc.feldt.systems:25565
+             ↓  (DNS → LoadBalancer IP)
+         mc-router (proxy pod)
+             ↓  (reads hostname from Minecraft handshake)
+         survival pod :25565
 ```
 
-The proxy's LoadBalancer service gets `external-dns.alpha.kubernetes.io/hostname` set to all registered hostnames. ExternalDNS picks that up and creates the A records.
+The proxy's LoadBalancer service gets the `external-dns.alpha.kubernetes.io/hostname` annotation updated every time a server is added or removed. ExternalDNS syncs that to Cloudflare (or wherever).
 
-## ExternalDNS setup
+## ExternalDNS
 
-ExternalDNS needs `--source=service` to read Service annotations. If you're only watching Ingresses, patch it:
+ExternalDNS needs `--source=service` to read Service annotations. If you only have `--source=ingress`:
 
 ```
 kubectl patch deployment external-dns -n kube-system --type=json \
@@ -135,8 +125,8 @@ make deploy    # deploys the operator
 ## Build
 
 ```
-make build          # compile
-make docker-build   # build image
-make generate       # regenerate deepcopy after type changes
-make manifests      # regenerate CRDs after marker changes
+make build          # compile locally
+make docker-build   # build container image
+make generate       # regenerate deepcopy methods after editing types
+make manifests      # regenerate CRDs after editing kubebuilder markers
 ```
