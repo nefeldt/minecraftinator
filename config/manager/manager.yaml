@@ -94,5 +94,7 @@ spec:
             memory: 64Mi
         volumeMounts: []
       volumes: []
+      imagePullSecrets:
+      - name: ghcr-pull-secret
       serviceAccountName: controller-manager
       terminationGracePeriodSeconds: 10
