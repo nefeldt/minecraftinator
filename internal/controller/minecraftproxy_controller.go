@@ -42,6 +42,7 @@ import (
 const (
 	defaultRouterImage = "itzg/mc-router:latest"
 	proxyFinalizerName = "minecraft.mittwald.de/proxy-finalizer"
+	defaultProxyName   = "proxy"
 
 	// externalDNSHostnameAnnotation is read by ExternalDNS to create DNS records.
 	externalDNSHostnameAnnotation = "external-dns.alpha.kubernetes.io/hostname"
@@ -119,7 +120,7 @@ func (r *MinecraftProxyReconciler) buildRoutes(ctx context.Context, proxy *minec
 		}
 		proxyRef := server.Spec.ProxyRef
 		if proxyRef == "" {
-			proxyRef = "proxy"
+			proxyRef = defaultProxyName
 		}
 		if proxyRef != proxy.Name {
 			continue
@@ -180,7 +181,8 @@ func (r *MinecraftProxyReconciler) reconcileRouterDeployment(ctx context.Context
 		return err
 	}
 
-	existing.Spec = desired.Spec
+	existing.Spec.Template = desired.Spec.Template
+	existing.Spec.Replicas = desired.Spec.Replicas
 	existing.Labels = desired.Labels
 	return r.Update(ctx, existing)
 }
@@ -320,7 +322,7 @@ func (r *MinecraftProxyReconciler) findProxiesForServer(ctx context.Context, obj
 	}
 	proxyRef := server.Spec.ProxyRef
 	if proxyRef == "" {
-		proxyRef = "proxy"
+		proxyRef = defaultProxyName
 	}
 	return []reconcile.Request{
 		{NamespacedName: types.NamespacedName{Name: proxyRef, Namespace: server.Namespace}},

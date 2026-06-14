@@ -116,7 +116,7 @@ func (r *MinecraftServerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 func (r *MinecraftServerReconciler) ensureProxy(ctx context.Context, mc *minecraftv1alpha1.MinecraftServer) (*minecraftv1alpha1.MinecraftProxy, error) {
 	proxyName := mc.Spec.ProxyRef
 	if proxyName == "" {
-		proxyName = "proxy"
+		proxyName = defaultProxyName
 	}
 
 	proxy := &minecraftv1alpha1.MinecraftProxy{}
@@ -242,7 +242,8 @@ func (r *MinecraftServerReconciler) reconcileDeployment(ctx context.Context, mc 
 		return err
 	}
 
-	existing.Spec = desired.Spec
+	existing.Spec.Template = desired.Spec.Template
+	existing.Spec.Replicas = desired.Spec.Replicas
 	existing.Labels = desired.Labels
 	return r.Update(ctx, existing)
 }
