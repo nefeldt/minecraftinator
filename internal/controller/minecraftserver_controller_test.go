@@ -21,6 +21,8 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -32,13 +34,13 @@ import (
 
 var _ = Describe("MinecraftServer Controller", func() {
 	Context("When reconciling a resource", func() {
-		const resourceName = "test-resource"
+		const resourceName = "test-server"
 
 		ctx := context.Background()
 
 		typeNamespacedName := types.NamespacedName{
 			Name:      resourceName,
-			Namespace: "default", // TODO(user):Modify as needed
+			Namespace: "default",
 		}
 		minecraftserver := &minecraftv1alpha1.MinecraftServer{}
 
@@ -51,21 +53,31 @@ var _ = Describe("MinecraftServer Controller", func() {
 						Name:      resourceName,
 						Namespace: "default",
 					},
-					// TODO(user): Specify other spec details if needed.
+					Spec: minecraftv1alpha1.MinecraftServerSpec{
+						DisableProxy: true, // keep tests self-contained
+					},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}
 		})
 
 		AfterEach(func() {
-			// TODO(user): Cleanup logic after each test, like removing the resource instance.
 			resource := &minecraftv1alpha1.MinecraftServer{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			Expect(err).NotTo(HaveOccurred())
 
-			By("Cleanup the specific resource instance MinecraftServer")
+			By("Cleanup the MinecraftServer instance")
 			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+
+			// Clean up owned resources so the next test run starts clean.
+			dep := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: resourceName, Namespace: "default"}}
+			_ = k8sClient.Delete(ctx, dep)
+			svc := &corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: resourceName, Namespace: "default"}}
+			_ = k8sClient.Delete(ctx, svc)
+			pvc := &corev1.PersistentVolumeClaim{ObjectMeta: metav1.ObjectMeta{Name: resourceName, Namespace: "default"}}
+			_ = k8sClient.Delete(ctx, pvc)
 		})
+
 		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource")
 			controllerReconciler := &MinecraftServerReconciler{
@@ -77,8 +89,20 @@ var _ = Describe("MinecraftServer Controller", func() {
 				NamespacedName: typeNamespacedName,
 			})
 			Expect(err).NotTo(HaveOccurred())
-			// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
-			// Example: If you expect a certain status condition after reconciliation, verify it here.
+
+			By("Checking a Deployment was created")
+			dep := &appsv1.Deployment{}
+			Expect(k8sClient.Get(ctx, typeNamespacedName, dep)).To(Succeed())
+			Expect(dep.Spec.Template.Spec.Containers).To(HaveLen(1))
+			Expect(dep.Spec.Template.Spec.Containers[0].Image).To(ContainSubstring("itzg/minecraft-server"))
+
+			By("Checking a Service was created")
+			svc := &corev1.Service{}
+			Expect(k8sClient.Get(ctx, typeNamespacedName, svc)).To(Succeed())
+
+			By("Checking a PVC was created")
+			pvc := &corev1.PersistentVolumeClaim{}
+			Expect(k8sClient.Get(ctx, typeNamespacedName, pvc)).To(Succeed())
 		})
 	})
 })
